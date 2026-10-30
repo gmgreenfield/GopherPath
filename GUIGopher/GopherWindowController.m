@@ -220,7 +220,8 @@
     } else {
         label.font = [NSFont systemFontOfSize:12];
         label.textColor = NSColor.secondaryLabelColor;
-        label.stringValue = [NSString stringWithFormat:@"%@:%ld", item.host, (long)item.port];
+        if (item.type == GopherItemTypeWebLink) label.stringValue = [NSURLComponents componentsWithString:item.externalURL].host ?: item.externalURL;
+        else label.stringValue = [NSString stringWithFormat:@"%@:%ld", item.host, (long)item.port];
         label.toolTip = label.stringValue;
     }
     return label;
@@ -252,6 +253,12 @@
     if (row < 0 || row >= (NSInteger)self.items.count) return;
     GopherItem *item = self.items[(NSUInteger)row];
     if (item.type == GopherItemTypeInfo || item.type == GopherItemTypeUnknown) return;
+    if (item.type == GopherItemTypeWebLink) {
+        NSURLComponents *components = [NSURLComponents componentsWithString:item.externalURL];
+        if ([components.scheme.lowercaseString isEqualToString:@"gopher"]) [self openAddress:item.externalURL recordHistory:YES];
+        else if (components.URL) [[NSWorkspace sharedWorkspace] openURL:components.URL];
+        return;
+    }
     if (item.type == GopherItemTypeSearch) {
         NSAlert *alert = [[NSAlert alloc] init];
         alert.messageText = @"Search this Gopher menu"; alert.informativeText = item.title;

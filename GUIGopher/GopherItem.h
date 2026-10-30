@@ -1,11 +1,14 @@
 #import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NS_ENUM(NSInteger, GopherItemType) {
     GopherItemTypeText,
     GopherItemTypeMenu,
     GopherItemTypeSearch,
     GopherItemTypeBinary,
     GopherItemTypeImage,
+    GopherItemTypeWebLink,
     GopherItemTypeInfo,
     GopherItemTypeUnknown
 };
@@ -17,5 +20,8 @@ typedef NS_ENUM(NSInteger, GopherItemType) {
 @property (nonatomic) NSInteger port;
 @property (nonatomic) GopherItemType type;
 @property (nonatomic, copy) NSString *typeGlyph;
+@property (nonatomic, copy, nullable) NSString *externalURL;
 + (NSArray<GopherItem *> *)menuItemsFromData:(NSData *)data;
 @end
+
+NS_ASSUME_NONNULL_END
