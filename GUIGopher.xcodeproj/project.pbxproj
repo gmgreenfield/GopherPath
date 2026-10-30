@@ -9,6 +9,8 @@
 		A10000000000000000000002 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* AppDelegate.m */; };
 		A10000000000000000000003 /* GopherWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* GopherWindowController.m */; };
 		A10000000000000000000004 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* AppKit.framework */; };
+		A10000000000000000000005 /* GopherItem.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* GopherItem.m */; };
+		A10000000000000000000006 /* GopherClient.m in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* GopherClient.m */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
 		B10000000000000000000001 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
@@ -19,13 +21,17 @@
 		B10000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000000000000000000007 /* GUIGopher.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GUIGopher.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000008 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		B10000000000000000000009 /* GopherItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GopherItem.h; sourceTree = "<group>"; };
+		B10000000000000000000010 /* GopherItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GopherItem.m; sourceTree = "<group>"; };
+		B10000000000000000000011 /* GopherClient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GopherClient.h; sourceTree = "<group>"; };
+		B10000000000000000000012 /* GopherClient.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GopherClient.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
 		C10000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000004 /* AppKit.framework in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 /* Begin PBXGroup section */
 		D10000000000000000000001 = {isa = PBXGroup; children = (D10000000000000000000002 /* GUIGopher */, D10000000000000000000003 /* Products */,); sourceTree = "<group>"; };
-		D10000000000000000000002 /* GUIGopher */ = {isa = PBXGroup; path = GUIGopher; sourceTree = "<group>"; children = (B10000000000000000000001 /* main.m */, B10000000000000000000002 /* AppDelegate.h */, B10000000000000000000003 /* AppDelegate.m */, B10000000000000000000004 /* GopherWindowController.h */, B10000000000000000000005 /* GopherWindowController.m */, B10000000000000000000006 /* Info.plist */,); };
+		D10000000000000000000002 /* GUIGopher */ = {isa = PBXGroup; path = GUIGopher; sourceTree = "<group>"; children = (B10000000000000000000001 /* main.m */, B10000000000000000000002 /* AppDelegate.h */, B10000000000000000000003 /* AppDelegate.m */, B10000000000000000000004 /* GopherWindowController.h */, B10000000000000000000005 /* GopherWindowController.m */, B10000000000000000000006 /* Info.plist */, B10000000000000000000009 /* GopherItem.h */, B10000000000000000000010 /* GopherItem.m */, B10000000000000000000011 /* GopherClient.h */, B10000000000000000000012 /* GopherClient.m */,); };
 		D10000000000000000000003 /* Products */ = {isa = PBXGroup; name = Products; sourceTree = "<group>"; children = (B10000000000000000000007 /* GUIGopher.app */,); };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
@@ -38,7 +44,7 @@
 		C10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 /* Begin PBXSourcesBuildPhase section */
-		C10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* main.m in Sources */, A10000000000000000000002 /* AppDelegate.m in Sources */, A10000000000000000000003 /* GopherWindowController.m in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		C10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* main.m in Sources */, A10000000000000000000002 /* AppDelegate.m in Sources */, A10000000000000000000003 /* GopherWindowController.m in Sources */, A10000000000000000000005 /* GopherItem.m in Sources */, A10000000000000000000006 /* GopherClient.m in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin XCBuildConfiguration section */
 		F20000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGN_STYLE = Automatic; INFOPLIST_FILE = GUIGopher/Info.plist; MACOSX_DEPLOYMENT_TARGET = 12.0; PRODUCT_BUNDLE_IDENTIFIER = com.gui-gopher.client; PRODUCT_NAME = GUIGopher; SDKROOT = macosx; }; name = Debug; };

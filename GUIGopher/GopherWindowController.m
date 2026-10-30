@@ -1,11 +1,26 @@
 #import "GopherWindowController.h"
+#import "GopherClient.h"
+#import "GopherItem.h"
 
-@interface GopherWindowController () <NSTextFieldDelegate>
-@property (nonatomic, strong) NSSplitView *splitView;
-@property (nonatomic, strong) NSOutlineView *sidebar;
+@interface GopherWindowController () <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
 @property (nonatomic, strong) NSTableView *itemsTable;
 @property (nonatomic, strong) NSTextField *addressField;
 @property (nonatomic, strong) NSTextField *welcomeLabel;
+@property (nonatomic, strong) NSTextField *statusLabel;
+@property (nonatomic, strong) NSScrollView *listScrollView;
+@property (nonatomic, strong) NSScrollView *readerScrollView;
+@property (nonatomic, strong) NSTextView *readerView;
+@property (nonatomic, strong) NSButton *backButton;
+@property (nonatomic, strong) NSButton *forwardButton;
+@property (nonatomic, strong) GopherClient *client;
+@property (nonatomic, copy) NSArray<GopherItem *> *items;
+@property (nonatomic, strong) NSMutableArray<NSString *> *history;
+@property (nonatomic) NSInteger historyIndex;
+@property (nonatomic, copy) NSString *currentHost;
+@property (nonatomic) NSInteger currentPort;
+@property (nonatomic, copy) NSString *currentSelector;
+@property (nonatomic) unichar currentType;
+@property (nonatomic, copy) NSString *currentURL;
 @end
 
 @implementation GopherWindowController
@@ -13,12 +28,15 @@
 - (instancetype)init {
     NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1024, 680)
                                                    styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
-                                                     backing:NSBackingStoreBuffered
-                                                       defer:NO];
+                                                     backing:NSBackingStoreBuffered defer:NO];
     self = [super initWithWindow:window];
     if (self) {
         window.title = @"GUI Gopher";
         window.minSize = NSMakeSize(720, 460);
+        self.client = [[GopherClient alloc] init];
+        self.items = @[];
+        self.history = [NSMutableArray array];
+        self.historyIndex = -1;
         [self buildInterface];
     }
     return self;
@@ -32,107 +50,109 @@
     toolbar.blendingMode = NSVisualEffectBlendingModeWithinWindow;
     [content addSubview:toolbar];
 
-    NSButton *back = [self buttonWithTitle:@"‹" action:nil];
-    NSButton *forward = [self buttonWithTitle:@"›" action:nil];
-    back.font = [NSFont systemFontOfSize:22 weight:NSFontWeightRegular];
-    forward.font = [NSFont systemFontOfSize:22 weight:NSFontWeightRegular];
-    back.enabled = NO;
-    forward.enabled = NO;
+    self.backButton = [self buttonWithTitle:@"‹" action:@selector(goBack:)];
+    self.forwardButton = [self buttonWithTitle:@"›" action:@selector(goForward:)];
+    self.backButton.font = [NSFont systemFontOfSize:22 weight:NSFontWeightRegular];
+    self.forwardButton.font = [NSFont systemFontOfSize:22 weight:NSFontWeightRegular];
+    self.backButton.enabled = NO;
+    self.forwardButton.enabled = NO;
+    [toolbar addSubview:self.backButton];
+    [toolbar addSubview:self.forwardButton];
+
     self.addressField = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.addressField.translatesAutoresizingMaskIntoConstraints = NO;
     self.addressField.placeholderString = @"Enter a Gopher address…";
     self.addressField.font = [NSFont systemFontOfSize:13];
     self.addressField.bezelStyle = NSTextFieldRoundedBezel;
     self.addressField.delegate = self;
-    [toolbar addSubview:back];
-    [toolbar addSubview:forward];
     [toolbar addSubview:self.addressField];
 
-    self.splitView = [[NSSplitView alloc] initWithFrame:NSZeroRect];
-    self.splitView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.splitView.vertical = YES;
-    self.splitView.dividerStyle = NSSplitViewDividerStyleThin;
-    [content addSubview:self.splitView];
-
+    NSSplitView *splitView = [[NSSplitView alloc] initWithFrame:NSZeroRect];
+    splitView.translatesAutoresizingMaskIntoConstraints = NO;
+    splitView.vertical = YES;
+    splitView.dividerStyle = NSSplitViewDividerStyleThin;
+    [content addSubview:splitView];
     NSView *side = [[NSView alloc] initWithFrame:NSZeroRect];
     NSView *main = [[NSView alloc] initWithFrame:NSZeroRect];
-    [self.splitView addSubview:side];
-    [self.splitView addSubview:main];
+    [splitView addSubview:side];
+    [splitView addSubview:main];
 
-    self.sidebar = [[NSOutlineView alloc] initWithFrame:NSZeroRect];
+    NSTableView *sidebar = [[NSTableView alloc] initWithFrame:NSZeroRect];
+    sidebar.identifier = @"sidebar";
     NSTableColumn *sidebarColumn = [[NSTableColumn alloc] initWithIdentifier:@"sidebar"];
-    sidebarColumn.title = @"LIBRARY";
-    [self.sidebar addTableColumn:sidebarColumn];
-    self.sidebar.outlineTableColumn = sidebarColumn;
-    self.sidebar.headerView = nil;
-    self.sidebar.rowSizeStyle = NSTableViewRowSizeStyleDefault;
-    self.sidebar.translatesAutoresizingMaskIntoConstraints = NO;
-    [side addSubview:self.sidebar];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.sidebar.leadingAnchor constraintEqualToAnchor:side.leadingAnchor],
-        [self.sidebar.trailingAnchor constraintEqualToAnchor:side.trailingAnchor],
-        [self.sidebar.topAnchor constraintEqualToAnchor:side.topAnchor],
-        [self.sidebar.bottomAnchor constraintEqualToAnchor:side.bottomAnchor]
-    ]];
+    [sidebar addTableColumn:sidebarColumn];
+    sidebar.headerView = nil;
+    sidebar.rowSizeStyle = NSTableViewRowSizeStyleDefault;
+    sidebar.dataSource = self;
+    sidebar.delegate = self;
+    NSScrollView *sidebarScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    sidebarScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    sidebarScroll.hasVerticalScroller = YES;
+    sidebarScroll.documentView = sidebar;
+    [side addSubview:sidebarScroll];
 
     self.itemsTable = [[NSTableView alloc] initWithFrame:NSZeroRect];
     NSTableColumn *iconColumn = [[NSTableColumn alloc] initWithIdentifier:@"icon"];
-    iconColumn.width = 34;
-    iconColumn.maxWidth = 34;
-    iconColumn.minWidth = 34;
+    iconColumn.width = 34; iconColumn.maxWidth = 34; iconColumn.minWidth = 34;
     NSTableColumn *nameColumn = [[NSTableColumn alloc] initWithIdentifier:@"name"];
-    nameColumn.title = @"NAME";
     NSTableColumn *descriptionColumn = [[NSTableColumn alloc] initWithIdentifier:@"description"];
-    descriptionColumn.title = @"DESCRIPTION";
     [self.itemsTable addTableColumn:iconColumn];
     [self.itemsTable addTableColumn:nameColumn];
     [self.itemsTable addTableColumn:descriptionColumn];
     self.itemsTable.headerView = nil;
     self.itemsTable.rowSizeStyle = NSTableViewRowSizeStyleLarge;
     self.itemsTable.usesAlternatingRowBackgroundColors = YES;
-    NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
-    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    scrollView.hasVerticalScroller = YES;
-    scrollView.documentView = self.itemsTable;
-    [main addSubview:scrollView];
+    self.itemsTable.dataSource = self;
+    self.itemsTable.delegate = self;
+    self.itemsTable.doubleAction = @selector(openSelectedItem:);
+    self.listScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    self.listScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.listScrollView.hasVerticalScroller = YES;
+    self.listScrollView.documentView = self.itemsTable;
+    [main addSubview:self.listScrollView];
+
+    self.readerView = [[NSTextView alloc] initWithFrame:NSZeroRect];
+    self.readerView.editable = NO;
+    self.readerView.selectable = YES;
+    self.readerView.textContainerInset = NSMakeSize(32, 28);
+    self.readerView.font = [NSFont userFixedPitchFontOfSize:13];
+    self.readerScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    self.readerScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.readerScrollView.hasVerticalScroller = YES;
+    self.readerScrollView.documentView = self.readerView;
+    self.readerScrollView.hidden = YES;
+    [main addSubview:self.readerScrollView];
 
     self.welcomeLabel = [NSTextField labelWithString:@"A quieter corner of the internet."];
     self.welcomeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.welcomeLabel.font = [NSFont systemFontOfSize:22 weight:NSFontWeightMedium];
     self.welcomeLabel.textColor = NSColor.secondaryLabelColor;
     [main addSubview:self.welcomeLabel];
-    [NSLayoutConstraint activateConstraints:@[
-        [scrollView.leadingAnchor constraintEqualToAnchor:main.leadingAnchor],
-        [scrollView.trailingAnchor constraintEqualToAnchor:main.trailingAnchor],
-        [scrollView.topAnchor constraintEqualToAnchor:main.topAnchor],
-        [scrollView.bottomAnchor constraintEqualToAnchor:main.bottomAnchor],
-        [self.welcomeLabel.centerXAnchor constraintEqualToAnchor:main.centerXAnchor],
-        [self.welcomeLabel.centerYAnchor constraintEqualToAnchor:main.centerYAnchor]
-    ]];
+    self.statusLabel = [NSTextField labelWithString:@"Enter a Gopher address to begin"];
+    self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusLabel.font = [NSFont systemFontOfSize:11];
+    self.statusLabel.textColor = NSColor.tertiaryLabelColor;
+    [main addSubview:self.statusLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [toolbar.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
-        [toolbar.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-        [toolbar.topAnchor constraintEqualToAnchor:content.topAnchor],
-        [toolbar.heightAnchor constraintEqualToConstant:54],
-        [back.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14],
-        [back.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
-        [back.widthAnchor constraintEqualToConstant:30],
-        [forward.leadingAnchor constraintEqualToAnchor:back.trailingAnchor constant:4],
-        [forward.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
-        [forward.widthAnchor constraintEqualToConstant:30],
-        [self.addressField.leadingAnchor constraintEqualToAnchor:forward.trailingAnchor constant:14],
-        [self.addressField.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-16],
-        [self.addressField.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
-        [self.addressField.heightAnchor constraintEqualToConstant:28],
-        [self.splitView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
-        [self.splitView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
-        [self.splitView.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor],
-        [self.splitView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor]
+        [sidebarScroll.leadingAnchor constraintEqualToAnchor:side.leadingAnchor], [sidebarScroll.trailingAnchor constraintEqualToAnchor:side.trailingAnchor],
+        [sidebarScroll.topAnchor constraintEqualToAnchor:side.topAnchor], [sidebarScroll.bottomAnchor constraintEqualToAnchor:side.bottomAnchor],
+        [self.listScrollView.leadingAnchor constraintEqualToAnchor:main.leadingAnchor], [self.listScrollView.trailingAnchor constraintEqualToAnchor:main.trailingAnchor],
+        [self.listScrollView.topAnchor constraintEqualToAnchor:main.topAnchor], [self.listScrollView.bottomAnchor constraintEqualToAnchor:main.bottomAnchor],
+        [self.readerScrollView.leadingAnchor constraintEqualToAnchor:main.leadingAnchor], [self.readerScrollView.trailingAnchor constraintEqualToAnchor:main.trailingAnchor],
+        [self.readerScrollView.topAnchor constraintEqualToAnchor:main.topAnchor], [self.readerScrollView.bottomAnchor constraintEqualToAnchor:main.bottomAnchor],
+        [self.welcomeLabel.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.welcomeLabel.centerYAnchor constraintEqualToAnchor:main.centerYAnchor constant:-14],
+        [self.statusLabel.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.statusLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:12],
+        [toolbar.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [toolbar.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [toolbar.topAnchor constraintEqualToAnchor:content.topAnchor], [toolbar.heightAnchor constraintEqualToConstant:54],
+        [self.backButton.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14], [self.backButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.backButton.widthAnchor constraintEqualToConstant:30],
+        [self.forwardButton.leadingAnchor constraintEqualToAnchor:self.backButton.trailingAnchor constant:4], [self.forwardButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.forwardButton.widthAnchor constraintEqualToConstant:30],
+        [self.addressField.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:14], [self.addressField.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-16],
+        [self.addressField.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.addressField.heightAnchor constraintEqualToConstant:28],
+        [splitView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [splitView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [splitView.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor], [splitView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor]
     ]];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.splitView setPosition:220 ofDividerAtIndex:0];
-    });
+    dispatch_async(dispatch_get_main_queue(), ^{ [splitView setPosition:220 ofDividerAtIndex:0]; });
 }
 
 - (NSButton *)buttonWithTitle:(NSString *)title action:(SEL)action {
@@ -140,6 +160,130 @@
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.bezelStyle = NSBezelStyleTexturedRounded;
     return button;
+}
+
+- (BOOL)control:(NSControl *)control textView:(NSTextView *)textView doCommandBySelector:(SEL)commandSelector {
+    if (commandSelector == @selector(insertNewline:)) { [self openAddress:self.addressField.stringValue recordHistory:YES]; return YES; }
+    return NO;
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView {
+    return [tableView.identifier isEqualToString:@"sidebar"] ? 2 : self.items.count;
+}
+
+- (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row {
+    if ([tableView.identifier isEqualToString:@"sidebar"]) {
+        NSArray *labels = @[@"Bookmarks", @"History"];
+        NSTextField *label = [NSTextField labelWithString:labels[(NSUInteger)row]];
+        label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+        return label;
+    }
+    GopherItem *item = self.items[(NSUInteger)row];
+    if ([column.identifier isEqualToString:@"icon"]) {
+        NSImageView *imageView = [[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 18, 18)];
+        imageView.image = [NSImage imageWithSystemSymbolName:item.typeGlyph accessibilityDescription:item.title];
+        imageView.contentTintColor = item.type == GopherItemTypeMenu ? NSColor.systemOrangeColor : NSColor.secondaryLabelColor;
+        imageView.imageScaling = NSImageScaleProportionallyDown;
+        return imageView;
+    }
+    NSTextField *label = [NSTextField labelWithString:item.title];
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    if ([column.identifier isEqualToString:@"name"]) label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+    else { label.font = [NSFont systemFontOfSize:12]; label.textColor = NSColor.secondaryLabelColor; label.stringValue = [NSString stringWithFormat:@"%@:%ld", item.host, (long)item.port]; }
+    return label;
+}
+
+- (void)tableViewSelectionDidChange:(NSNotification *)notification {
+    if ([notification.object identifier] && [[notification.object identifier] isEqualToString:@"sidebar"]) return;
+    NSInteger row = self.itemsTable.selectedRow;
+    if (row >= 0 && row < (NSInteger)self.items.count) {
+        GopherItem *item = self.items[(NSUInteger)row];
+        self.statusLabel.stringValue = [NSString stringWithFormat:@"%@  ·  %@:%ld", item.title, item.host, (long)item.port];
+    }
+}
+
+- (void)openSelectedItem:(id)sender {
+    NSInteger row = self.itemsTable.clickedRow >= 0 ? self.itemsTable.clickedRow : self.itemsTable.selectedRow;
+    if (row < 0 || row >= (NSInteger)self.items.count) return;
+    GopherItem *item = self.items[(NSUInteger)row];
+    if (item.type == GopherItemTypeInfo || item.type == GopherItemTypeUnknown) return;
+    if (item.type == GopherItemTypeSearch) {
+        NSAlert *alert = [[NSAlert alloc] init];
+        alert.messageText = @"Search this Gopher menu"; alert.informativeText = item.title;
+        [alert addButtonWithTitle:@"Search"]; [alert addButtonWithTitle:@"Cancel"];
+        NSTextField *queryField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 280, 24)];
+        queryField.placeholderString = @"Search terms"; alert.accessoryView = queryField;
+        if ([alert runModal] != NSAlertFirstButtonReturn || queryField.stringValue.length == 0) return;
+        [self loadHost:item.host port:item.port selector:item.selector type:'7' query:queryField.stringValue url:nil recordHistory:YES];
+        return;
+    }
+    unichar type = item.type == GopherItemTypeMenu ? '1' : item.type == GopherItemTypeText ? '0' : item.type == GopherItemTypeImage ? 'I' : '9';
+    [self loadHost:item.host port:item.port selector:item.selector type:type query:nil url:nil recordHistory:YES];
+}
+
+- (void)goBack:(id)sender {
+    if (self.historyIndex <= 0) return;
+    self.historyIndex--; [self openAddress:self.history[(NSUInteger)self.historyIndex] recordHistory:NO];
+}
+- (void)goForward:(id)sender {
+    if (self.historyIndex + 1 >= (NSInteger)self.history.count) return;
+    self.historyIndex++; [self openAddress:self.history[(NSUInteger)self.historyIndex] recordHistory:NO];
+}
+
+- (void)openAddress:(NSString *)rawAddress recordHistory:(BOOL)recordHistory {
+    NSString *address = [rawAddress stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (address.length == 0) return;
+    if (![address.lowercaseString hasPrefix:@"gopher://"]) address = [@"gopher://" stringByAppendingString:address];
+    NSURLComponents *components = [NSURLComponents componentsWithString:address];
+    if (!components.host.length) { self.statusLabel.stringValue = @"Enter a valid Gopher host, such as gopher.floodgap.com"; return; }
+    NSString *encodedPath = components.percentEncodedPath ?: @"/";
+    NSString *path = [encodedPath stringByRemovingPercentEncoding] ?: encodedPath;
+    unichar type = path.length > 1 ? [path characterAtIndex:1] : '1';
+    NSString *selector = path.length > 1 ? [path substringFromIndex:2] : @"";
+    NSString *query = components.percentEncodedQuery.length ? [components.percentEncodedQuery stringByRemovingPercentEncoding] : nil;
+    NSInteger port = components.port ? components.port.integerValue : 70;
+    [self loadHost:components.host port:port selector:selector type:type query:query url:address recordHistory:recordHistory];
+}
+
+- (void)loadHost:(NSString *)host port:(NSInteger)port selector:(NSString *)selector type:(unichar)type query:(NSString *)query url:(NSString *)url recordHistory:(BOOL)recordHistory {
+    self.currentHost = host; self.currentPort = port; self.currentSelector = selector; self.currentType = type;
+    self.currentURL = url ?: [NSString stringWithFormat:@"gopher://%@:%ld/%C%@", host, (long)port, type, selector];
+    self.addressField.stringValue = self.currentURL;
+    self.statusLabel.stringValue = [NSString stringWithFormat:@"Connecting to %@…", host];
+    self.welcomeLabel.hidden = YES; self.listScrollView.hidden = YES; self.readerScrollView.hidden = YES;
+    if (recordHistory) {
+        while (self.history.count > (NSUInteger)(self.historyIndex + 1)) [self.history removeLastObject];
+        [self.history addObject:self.currentURL]; self.historyIndex = (NSInteger)self.history.count - 1;
+    }
+    [self updateNavigationButtons];
+    [self.client fetchHost:host port:port selector:selector query:(type == '7' ? query : nil) completion:^(NSData *data, NSError *error) {
+        if (error) { self.statusLabel.stringValue = error.localizedDescription; self.welcomeLabel.stringValue = @"Couldn’t reach this Gopher server."; self.welcomeLabel.hidden = NO; return; }
+        if (type == '0') {
+            NSString *text = [[NSString alloc] initWithData:data encoding:NSISOLatin1StringEncoding] ?: [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
+            self.readerView.string = text; self.readerScrollView.hidden = NO;
+            self.statusLabel.stringValue = [NSString stringWithFormat:@"Text document  ·  %@:%ld", host, (long)port];
+            return;
+        }
+        if (type == '9' || type == 'g' || type == 'I') {
+            NSSavePanel *panel = [NSSavePanel savePanel];
+            panel.nameFieldStringValue = selector.lastPathComponent.length ? selector.lastPathComponent : @"gopher-download";
+            if ([panel runModal] == NSModalResponseOK && panel.URL) {
+                NSError *writeError = nil;
+                if (![data writeToURL:panel.URL options:NSDataWritingAtomic error:&writeError]) self.statusLabel.stringValue = writeError.localizedDescription;
+                else self.statusLabel.stringValue = @"Download complete";
+            } else self.statusLabel.stringValue = @"Download cancelled";
+            self.listScrollView.hidden = NO; return;
+        }
+        self.items = [GopherItem menuItemsFromData:data]; [self.itemsTable reloadData];
+        self.listScrollView.hidden = NO; self.welcomeLabel.hidden = self.items.count > 0;
+        self.welcomeLabel.stringValue = @"This menu is empty.";
+        self.statusLabel.stringValue = [NSString stringWithFormat:@"%lu items  ·  %@:%ld", (unsigned long)self.items.count, host, (long)port];
+    }];
+}
+
+- (void)updateNavigationButtons {
+    self.backButton.enabled = self.historyIndex > 0;
+    self.forwardButton.enabled = self.historyIndex + 1 < (NSInteger)self.history.count;
 }
 
 @end
