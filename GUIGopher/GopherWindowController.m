@@ -100,12 +100,20 @@
     self.itemsTable = [[NSTableView alloc] initWithFrame:NSZeroRect];
     NSTableColumn *iconColumn = [[NSTableColumn alloc] initWithIdentifier:@"icon"];
     iconColumn.width = 34; iconColumn.maxWidth = 34; iconColumn.minWidth = 34;
+    iconColumn.resizingMask = NSTableColumnNoResizing;
     NSTableColumn *nameColumn = [[NSTableColumn alloc] initWithIdentifier:@"name"];
+    nameColumn.width = 420;
+    nameColumn.minWidth = 200;
+    nameColumn.resizingMask = NSTableColumnAutoresizingMask;
     NSTableColumn *descriptionColumn = [[NSTableColumn alloc] initWithIdentifier:@"description"];
+    descriptionColumn.width = 160;
+    descriptionColumn.minWidth = 130;
+    descriptionColumn.resizingMask = NSTableColumnNoResizing;
     [self.itemsTable addTableColumn:iconColumn];
     [self.itemsTable addTableColumn:nameColumn];
     [self.itemsTable addTableColumn:descriptionColumn];
     self.itemsTable.headerView = nil;
+    self.itemsTable.columnAutoresizingStyle = NSTableViewFirstColumnOnlyAutoresizingStyle;
     self.itemsTable.rowSizeStyle = NSTableViewRowSizeStyleLarge;
     self.itemsTable.usesAlternatingRowBackgroundColors = YES;
     self.itemsTable.dataSource = self;
@@ -206,8 +214,15 @@
     }
     NSTextField *label = [NSTextField labelWithString:item.title];
     label.lineBreakMode = NSLineBreakByTruncatingTail;
-    if ([column.identifier isEqualToString:@"name"]) label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-    else { label.font = [NSFont systemFontOfSize:12]; label.textColor = NSColor.secondaryLabelColor; label.stringValue = [NSString stringWithFormat:@"%@:%ld", item.host, (long)item.port]; }
+    if ([column.identifier isEqualToString:@"name"]) {
+        label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+        label.toolTip = item.title;
+    } else {
+        label.font = [NSFont systemFontOfSize:12];
+        label.textColor = NSColor.secondaryLabelColor;
+        label.stringValue = [NSString stringWithFormat:@"%@:%ld", item.host, (long)item.port];
+        label.toolTip = label.stringValue;
+    }
     return label;
 }
 
