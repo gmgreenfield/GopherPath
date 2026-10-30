@@ -2,6 +2,41 @@
 #import "GopherClient.h"
 #import "GopherItem.h"
 
+@interface GopherItemsTableView : NSTableView
+@end
+
+@implementation GopherItemsTableView
+- (void)mouseDown:(NSEvent *)event {
+    [super mouseDown:event];
+    if (event.clickCount == 1 && self.clickedRow >= 0 && self.clickedRow < self.numberOfRows) [self sendAction:self.action to:self.target];
+}
+@end
+
+@interface GopherItemRowView : NSTableRowView
+@property (nonatomic) BOOL pointerIsInside;
+@property (nonatomic, strong) NSTrackingArea *rowTrackingArea;
+@end
+
+@implementation GopherItemRowView
+- (void)updateTrackingAreas {
+    if (self.rowTrackingArea) [self removeTrackingArea:self.rowTrackingArea];
+    self.rowTrackingArea = [[NSTrackingArea alloc] initWithRect:NSZeroRect
+                                                       options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect
+                                                         owner:self userInfo:nil];
+    [self addTrackingArea:self.rowTrackingArea];
+    [super updateTrackingAreas];
+}
+- (void)mouseEntered:(NSEvent *)event { self.pointerIsInside = YES; [self setNeedsDisplay:YES]; }
+- (void)mouseExited:(NSEvent *)event { self.pointerIsInside = NO; [self setNeedsDisplay:YES]; }
+- (void)drawBackgroundInRect:(NSRect)dirtyRect {
+    [super drawBackgroundInRect:dirtyRect];
+    if (self.pointerIsInside && !self.isSelected) {
+        [[NSColor.controlAccentColor colorWithAlphaComponent:0.08] setFill];
+        NSRectFillUsingOperation(dirtyRect, NSCompositingOperationSourceOver);
+    }
+}
+@end
+
 @interface GopherWindowController () <NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate>
 @property (nonatomic, strong) NSTableView *itemsTable;
 @property (nonatomic, strong) NSTextField *addressField;
@@ -97,7 +132,9 @@
     sidebarScroll.documentView = sidebar;
     [side addSubview:sidebarScroll];
 
-    self.itemsTable = [[NSTableView alloc] initWithFrame:NSZeroRect];
+    self.itemsTable = [[GopherItemsTableView alloc] initWithFrame:NSZeroRect];
+    self.itemsTable.target = self;
+    self.itemsTable.action = @selector(openSelectedItem:);
     NSTableColumn *iconColumn = [[NSTableColumn alloc] initWithIdentifier:@"icon"];
     iconColumn.width = 34; iconColumn.maxWidth = 34; iconColumn.minWidth = 34;
     iconColumn.resizingMask = NSTableColumnNoResizing;
@@ -118,7 +155,8 @@
     self.itemsTable.usesAlternatingRowBackgroundColors = YES;
     self.itemsTable.dataSource = self;
     self.itemsTable.delegate = self;
-    self.itemsTable.doubleAction = @selector(openSelectedItem:);
+    self.itemsTable.focusRingType = NSFocusRingTypeDefault;
+    self.itemsTable.allowsMultipleSelection = NO;
     self.listScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     self.listScrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.listScrollView.hasVerticalScroller = YES;
@@ -213,8 +251,10 @@
         return imageView;
     }
     NSTextField *label = [NSTextField labelWithString:item.title];
-    label.lineBreakMode = NSLineBreakByTruncatingTail;
     if ([column.identifier isEqualToString:@"name"]) {
+        label.maximumNumberOfLines = 0;
+        label.usesSingleLineMode = NO;
+        label.lineBreakMode = NSLineBreakByCharWrapping;
         label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
         label.toolTip = item.title;
     } else {
@@ -225,6 +265,22 @@
         label.toolTip = label.stringValue;
     }
     return label;
+}
+
+- (NSTableRowView *)tableView:(NSTableView *)tableView rowViewForRow:(NSInteger)row {
+    return [tableView.identifier isEqualToString:@"sidebar"] ? nil : [[GopherItemRowView alloc] initWithFrame:NSZeroRect];
+}
+
+- (CGFloat)tableView:(NSTableView *)tableView heightOfRow:(NSInteger)row {
+    if ([tableView.identifier isEqualToString:@"sidebar"] || row < 0 || row >= (NSInteger)self.items.count) return 28;
+    GopherItem *item = self.items[(NSUInteger)row];
+    NSTableColumn *nameColumn = [tableView.tableColumns filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"identifier == %@", @"name"]].firstObject;
+    CGFloat availableWidth = MAX(100, nameColumn.width - 16);
+    NSDictionary *attributes = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightMedium]};
+    NSRect titleBounds = [item.title boundingRectWithSize:NSMakeSize(availableWidth, CGFLOAT_MAX)
+                                                  options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                               attributes:attributes];
+    return MAX(34, ceil(NSHeight(titleBounds)) + 14);
 }
 
 - (void)tableViewSelectionDidChange:(NSNotification *)notification {
