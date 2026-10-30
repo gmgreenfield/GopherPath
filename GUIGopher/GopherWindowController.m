@@ -48,7 +48,11 @@
 @property (nonatomic, strong) NSButton *backButton;
 @property (nonatomic, strong) NSButton *forwardButton;
 @property (nonatomic, strong) NSButton *bookmarkButton;
+@property (nonatomic, strong) NSButton *reloadStopButton;
+@property (nonatomic, strong) NSButton *retryButton;
+@property (nonatomic, strong) NSProgressIndicator *progressIndicator;
 @property (nonatomic, strong) GopherClient *client;
+@property (nonatomic, strong) GopherRequestToken *currentRequestToken;
 @property (nonatomic, copy) NSArray<GopherItem *> *items;
 @property (nonatomic, strong) NSMutableArray<NSString *> *history;
 @property (nonatomic, strong) NSMutableArray<NSDictionary<NSString *, NSString *> *> *bookmarks;
@@ -58,6 +62,8 @@
 @property (nonatomic, copy) NSString *currentSelector;
 @property (nonatomic) unichar currentType;
 @property (nonatomic, copy) NSString *currentURL;
+@property (nonatomic, copy) NSString *currentQuery;
+@property (nonatomic) BOOL isLoading;
 @end
 
 @implementation GopherWindowController
@@ -96,6 +102,10 @@
     self.forwardButton.enabled = NO;
     [toolbar addSubview:self.backButton];
     [toolbar addSubview:self.forwardButton];
+    self.reloadStopButton = [self buttonWithTitle:@"↻" action:@selector(reloadOrStop:)];
+    self.reloadStopButton.font = [NSFont systemFontOfSize:17];
+    self.reloadStopButton.toolTip = @"Reload";
+    [toolbar addSubview:self.reloadStopButton];
     self.bookmarkButton = [self buttonWithTitle:@"☆" action:@selector(toggleBookmark:)];
     self.bookmarkButton.font = [NSFont systemFontOfSize:17];
     [toolbar addSubview:self.bookmarkButton];
@@ -185,6 +195,16 @@
     self.statusLabel.font = [NSFont systemFontOfSize:11];
     self.statusLabel.textColor = NSColor.tertiaryLabelColor;
     [main addSubview:self.statusLabel];
+    self.progressIndicator = [[NSProgressIndicator alloc] initWithFrame:NSZeroRect];
+    self.progressIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressIndicator.style = NSProgressIndicatorStyleSpinning;
+    self.progressIndicator.controlSize = NSControlSizeSmall;
+    self.progressIndicator.displayedWhenStopped = NO;
+    [main addSubview:self.progressIndicator];
+    self.retryButton = [self buttonWithTitle:@"Try Again" action:@selector(retryLastRequest:)];
+    self.retryButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.retryButton.hidden = YES;
+    [main addSubview:self.retryButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [sidebarScroll.leadingAnchor constraintEqualToAnchor:side.leadingAnchor], [sidebarScroll.trailingAnchor constraintEqualToAnchor:side.trailingAnchor],
@@ -195,11 +215,14 @@
         [self.readerScrollView.topAnchor constraintEqualToAnchor:main.topAnchor], [self.readerScrollView.bottomAnchor constraintEqualToAnchor:main.bottomAnchor],
         [self.welcomeLabel.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.welcomeLabel.centerYAnchor constraintEqualToAnchor:main.centerYAnchor constant:-14],
         [self.statusLabel.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.statusLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:12],
+        [self.progressIndicator.trailingAnchor constraintEqualToAnchor:self.statusLabel.leadingAnchor constant:-8], [self.progressIndicator.centerYAnchor constraintEqualToAnchor:self.statusLabel.centerYAnchor],
+        [self.retryButton.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.retryButton.topAnchor constraintEqualToAnchor:self.statusLabel.bottomAnchor constant:16],
         [toolbar.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [toolbar.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [toolbar.topAnchor constraintEqualToAnchor:content.topAnchor], [toolbar.heightAnchor constraintEqualToConstant:54],
         [self.backButton.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14], [self.backButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.backButton.widthAnchor constraintEqualToConstant:30],
         [self.forwardButton.leadingAnchor constraintEqualToAnchor:self.backButton.trailingAnchor constant:4], [self.forwardButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.forwardButton.widthAnchor constraintEqualToConstant:30],
-        [self.addressField.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:14], [self.addressField.trailingAnchor constraintEqualToAnchor:self.bookmarkButton.leadingAnchor constant:-10],
+        [self.reloadStopButton.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:4], [self.reloadStopButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.reloadStopButton.widthAnchor constraintEqualToConstant:30],
+        [self.addressField.leadingAnchor constraintEqualToAnchor:self.reloadStopButton.trailingAnchor constant:10], [self.addressField.trailingAnchor constraintEqualToAnchor:self.bookmarkButton.leadingAnchor constant:-10],
         [self.addressField.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.addressField.heightAnchor constraintEqualToConstant:28],
         [self.bookmarkButton.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-14], [self.bookmarkButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.bookmarkButton.widthAnchor constraintEqualToConstant:30],
         [splitView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [splitView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
@@ -354,22 +377,40 @@
 }
 
 - (void)loadHost:(NSString *)host port:(NSInteger)port selector:(NSString *)selector type:(unichar)type query:(NSString *)query url:(NSString *)url recordHistory:(BOOL)recordHistory {
+    [self.currentRequestToken cancel];
+    self.currentRequestToken = nil;
     self.currentHost = host; self.currentPort = port; self.currentSelector = selector; self.currentType = type;
+    self.currentQuery = query;
     self.currentURL = url ?: [NSString stringWithFormat:@"gopher://%@:%ld/%C%@", host, (long)port, type, selector];
     self.addressField.stringValue = self.currentURL;
     self.bookmarkButton.title = [self isBookmarked:self.currentURL] ? @"★" : @"☆";
-    self.statusLabel.stringValue = [NSString stringWithFormat:@"Connecting to %@…", host];
-    self.welcomeLabel.hidden = YES; self.listScrollView.hidden = YES; self.readerScrollView.hidden = YES;
+    self.welcomeLabel.stringValue = [NSString stringWithFormat:@"Connecting to %@…", host];
+    self.welcomeLabel.hidden = NO;
+    self.statusLabel.stringValue = [NSString stringWithFormat:@"Contacting Gopher server on port %ld", (long)port];
+    self.retryButton.hidden = YES;
+    self.listScrollView.hidden = YES; self.readerScrollView.hidden = YES;
+    [self setLoading:YES];
     if (recordHistory) {
         while (self.history.count > (NSUInteger)(self.historyIndex + 1)) [self.history removeLastObject];
         [self.history addObject:self.currentURL]; self.historyIndex = (NSInteger)self.history.count - 1;
     }
     [self updateNavigationButtons];
     [self refreshSidebar];
-    [self.client fetchHost:host port:port selector:selector query:(type == '7' ? query : nil) completion:^(NSData *data, NSError *error) {
-        if (error) { self.statusLabel.stringValue = error.localizedDescription; self.welcomeLabel.stringValue = @"Couldn’t reach this Gopher server."; self.welcomeLabel.hidden = NO; return; }
+    __block GopherRequestToken *requestToken = nil;
+    requestToken = [self.client fetchHost:host port:port selector:selector query:(type == '7' ? query : nil) completion:^(NSData *data, NSError *error) {
+        if (self.currentRequestToken != requestToken) return;
+        self.currentRequestToken = nil;
+        [self setLoading:NO];
+        if (error) {
+            self.statusLabel.stringValue = error.localizedDescription;
+            self.welcomeLabel.stringValue = @"Couldn’t open this Gopher address.";
+            self.welcomeLabel.hidden = NO;
+            self.retryButton.hidden = NO;
+            return;
+        }
         if (type == '0') {
             NSString *text = [[NSString alloc] initWithData:data encoding:NSISOLatin1StringEncoding] ?: [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] ?: @"";
+            self.welcomeLabel.hidden = YES;
             self.readerView.string = text; self.readerScrollView.hidden = NO;
             self.statusLabel.stringValue = [NSString stringWithFormat:@"Text document  ·  %@:%ld", host, (long)port];
             return;
@@ -389,6 +430,42 @@
         self.welcomeLabel.stringValue = @"This menu is empty.";
         self.statusLabel.stringValue = [NSString stringWithFormat:@"%lu items  ·  %@:%ld", (unsigned long)self.items.count, host, (long)port];
     }];
+    self.currentRequestToken = requestToken;
+}
+
+- (void)setLoading:(BOOL)loading {
+    self.isLoading = loading;
+    if (loading) [self.progressIndicator startAnimation:nil];
+    else [self.progressIndicator stopAnimation:nil];
+    self.reloadStopButton.title = loading ? @"×" : @"↻";
+    self.reloadStopButton.toolTip = loading ? @"Stop loading" : @"Reload this Gopher menu";
+}
+
+- (void)reloadOrStop:(id)sender {
+    if (self.isLoading) { [self stopLoading:sender]; return; }
+    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:NO];
+}
+
+- (void)stopLoading:(id)sender {
+    if (!self.isLoading) return;
+    [self.currentRequestToken cancel];
+    self.currentRequestToken = nil;
+    [self setLoading:NO];
+    self.listScrollView.hidden = YES;
+    self.readerScrollView.hidden = YES;
+    self.welcomeLabel.stringValue = @"Request stopped.";
+    self.welcomeLabel.hidden = NO;
+    self.statusLabel.stringValue = @"You can try again or enter another address.";
+    self.retryButton.hidden = NO;
+}
+
+- (void)retryLastRequest:(id)sender {
+    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:NO];
+}
+
+- (void)focusAddressBar:(id)sender {
+    [self.window makeFirstResponder:self.addressField];
+    [self.addressField selectText:nil];
 }
 
 - (void)updateNavigationButtons {
