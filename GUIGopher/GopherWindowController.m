@@ -12,9 +12,11 @@
 @property (nonatomic, strong) NSTextView *readerView;
 @property (nonatomic, strong) NSButton *backButton;
 @property (nonatomic, strong) NSButton *forwardButton;
+@property (nonatomic, strong) NSButton *bookmarkButton;
 @property (nonatomic, strong) GopherClient *client;
 @property (nonatomic, copy) NSArray<GopherItem *> *items;
 @property (nonatomic, strong) NSMutableArray<NSString *> *history;
+@property (nonatomic, strong) NSMutableArray<NSDictionary<NSString *, NSString *> *> *bookmarks;
 @property (nonatomic) NSInteger historyIndex;
 @property (nonatomic, copy) NSString *currentHost;
 @property (nonatomic) NSInteger currentPort;
@@ -36,6 +38,7 @@
         self.client = [[GopherClient alloc] init];
         self.items = @[];
         self.history = [NSMutableArray array];
+        self.bookmarks = [[[NSUserDefaults standardUserDefaults] arrayForKey:@"GopherBookmarks"] mutableCopy] ?: [NSMutableArray array];
         self.historyIndex = -1;
         [self buildInterface];
     }
@@ -58,6 +61,9 @@
     self.forwardButton.enabled = NO;
     [toolbar addSubview:self.backButton];
     [toolbar addSubview:self.forwardButton];
+    self.bookmarkButton = [self buttonWithTitle:@"☆" action:@selector(toggleBookmark:)];
+    self.bookmarkButton.font = [NSFont systemFontOfSize:17];
+    [toolbar addSubview:self.bookmarkButton];
 
     self.addressField = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.addressField.translatesAutoresizingMaskIntoConstraints = NO;
@@ -147,8 +153,9 @@
         [toolbar.topAnchor constraintEqualToAnchor:content.topAnchor], [toolbar.heightAnchor constraintEqualToConstant:54],
         [self.backButton.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14], [self.backButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.backButton.widthAnchor constraintEqualToConstant:30],
         [self.forwardButton.leadingAnchor constraintEqualToAnchor:self.backButton.trailingAnchor constant:4], [self.forwardButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.forwardButton.widthAnchor constraintEqualToConstant:30],
-        [self.addressField.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:14], [self.addressField.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-16],
+        [self.addressField.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:14], [self.addressField.trailingAnchor constraintEqualToAnchor:self.bookmarkButton.leadingAnchor constant:-10],
         [self.addressField.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.addressField.heightAnchor constraintEqualToConstant:28],
+        [self.bookmarkButton.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-14], [self.bookmarkButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.bookmarkButton.widthAnchor constraintEqualToConstant:30],
         [splitView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [splitView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [splitView.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor], [splitView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor]
     ]];
@@ -168,14 +175,25 @@
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView {
-    return [tableView.identifier isEqualToString:@"sidebar"] ? 2 : self.items.count;
+    return [tableView.identifier isEqualToString:@"sidebar"] ? (NSInteger)(2 + self.bookmarks.count + self.history.count) : self.items.count;
 }
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)column row:(NSInteger)row {
     if ([tableView.identifier isEqualToString:@"sidebar"]) {
-        NSArray *labels = @[@"Bookmarks", @"History"];
-        NSTextField *label = [NSTextField labelWithString:labels[(NSUInteger)row]];
-        label.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+        BOOL heading = row == 0 || row == (NSInteger)(self.bookmarks.count + 1);
+        NSString *title = nil;
+        if (row == 0) title = @"BOOKMARKS";
+        else if (row <= (NSInteger)self.bookmarks.count) title = self.bookmarks[(NSUInteger)row - 1][@"title"];
+        else if (row == (NSInteger)(self.bookmarks.count + 1)) title = @"HISTORY";
+        else {
+            NSUInteger historyOffset = (NSUInteger)(row - (NSInteger)self.bookmarks.count - 2);
+            NSUInteger historyRow = self.history.count - 1 - historyOffset;
+            title = [self titleForAddress:self.history[historyRow]];
+        }
+        NSTextField *label = [NSTextField labelWithString:title ?: @""];
+        label.font = heading ? [NSFont systemFontOfSize:10 weight:NSFontWeightSemibold] : [NSFont systemFontOfSize:12];
+        label.textColor = heading ? NSColor.tertiaryLabelColor : NSColor.labelColor;
+        label.lineBreakMode = NSLineBreakByTruncatingTail;
         return label;
     }
     GopherItem *item = self.items[(NSUInteger)row];
@@ -194,7 +212,19 @@
 }
 
 - (void)tableViewSelectionDidChange:(NSNotification *)notification {
-    if ([notification.object identifier] && [[notification.object identifier] isEqualToString:@"sidebar"]) return;
+    NSTableView *table = notification.object;
+    if ([table.identifier isEqualToString:@"sidebar"]) {
+        NSInteger row = table.selectedRow;
+        if (row > 0 && row <= (NSInteger)self.bookmarks.count) {
+            [self openAddress:self.bookmarks[(NSUInteger)row - 1][@"url"] recordHistory:YES];
+        } else if (row > (NSInteger)(self.bookmarks.count + 1)) {
+            NSUInteger historyOffset = (NSUInteger)(row - (NSInteger)self.bookmarks.count - 2);
+            NSUInteger historyRow = self.history.count - 1 - historyOffset;
+            [self openAddress:self.history[historyRow] recordHistory:YES];
+        }
+        [table deselectAll:nil];
+        return;
+    }
     NSInteger row = self.itemsTable.selectedRow;
     if (row >= 0 && row < (NSInteger)self.items.count) {
         GopherItem *item = self.items[(NSUInteger)row];
@@ -249,6 +279,7 @@
     self.currentHost = host; self.currentPort = port; self.currentSelector = selector; self.currentType = type;
     self.currentURL = url ?: [NSString stringWithFormat:@"gopher://%@:%ld/%C%@", host, (long)port, type, selector];
     self.addressField.stringValue = self.currentURL;
+    self.bookmarkButton.title = [self isBookmarked:self.currentURL] ? @"★" : @"☆";
     self.statusLabel.stringValue = [NSString stringWithFormat:@"Connecting to %@…", host];
     self.welcomeLabel.hidden = YES; self.listScrollView.hidden = YES; self.readerScrollView.hidden = YES;
     if (recordHistory) {
@@ -256,6 +287,7 @@
         [self.history addObject:self.currentURL]; self.historyIndex = (NSInteger)self.history.count - 1;
     }
     [self updateNavigationButtons];
+    [self refreshSidebar];
     [self.client fetchHost:host port:port selector:selector query:(type == '7' ? query : nil) completion:^(NSData *data, NSError *error) {
         if (error) { self.statusLabel.stringValue = error.localizedDescription; self.welcomeLabel.stringValue = @"Couldn’t reach this Gopher server."; self.welcomeLabel.hidden = NO; return; }
         if (type == '0') {
@@ -284,6 +316,44 @@
 - (void)updateNavigationButtons {
     self.backButton.enabled = self.historyIndex > 0;
     self.forwardButton.enabled = self.historyIndex + 1 < (NSInteger)self.history.count;
+}
+
+- (NSString *)titleForAddress:(NSString *)address {
+    NSURLComponents *components = [NSURLComponents componentsWithString:address];
+    NSString *lastPart = components.path.lastPathComponent;
+    if (lastPart.length == 0 || [lastPart isEqualToString:@"1"]) return components.host ?: address;
+    if (lastPart.length > 1) return [lastPart substringFromIndex:1];
+    return components.host ?: address;
+}
+
+- (BOOL)isBookmarked:(NSString *)address {
+    for (NSDictionary *bookmark in self.bookmarks) if ([bookmark[@"url"] isEqualToString:address]) return YES;
+    return NO;
+}
+
+- (void)toggleBookmark:(id)sender {
+    if (self.currentURL.length == 0) return;
+    NSUInteger match = [self.bookmarks indexOfObjectPassingTest:^BOOL(NSDictionary *bookmark, NSUInteger idx, BOOL *stop) {
+        return [bookmark[@"url"] isEqualToString:self.currentURL];
+    }];
+    if (match != NSNotFound) [self.bookmarks removeObjectAtIndex:match];
+    else [self.bookmarks insertObject:@{@"title": [self titleForAddress:self.currentURL], @"url": self.currentURL} atIndex:0];
+    [[NSUserDefaults standardUserDefaults] setObject:self.bookmarks forKey:@"GopherBookmarks"];
+    self.bookmarkButton.title = [self isBookmarked:self.currentURL] ? @"★" : @"☆";
+    [self refreshSidebar];
+}
+
+- (void)refreshSidebar {
+    for (NSView *view in self.window.contentView.subviews) {
+        if (![view isKindOfClass:NSSplitView.class]) continue;
+        NSSplitView *split = (NSSplitView *)view;
+        if (split.subviews.count == 0) continue;
+        for (NSView *sideChild in split.subviews.firstObject.subviews) {
+            if (![sideChild isKindOfClass:NSScrollView.class]) continue;
+            NSScrollView *scroll = (NSScrollView *)sideChild;
+            if ([scroll.documentView isKindOfClass:NSTableView.class]) [(NSTableView *)scroll.documentView reloadData];
+        }
+    }
 }
 
 @end
