@@ -74,7 +74,7 @@
                                                      backing:NSBackingStoreBuffered defer:NO];
     self = [super initWithWindow:window];
     if (self) {
-        window.title = @"GUI Gopher";
+        window.title = @"GopherPath";
         window.minSize = NSMakeSize(720, 460);
         self.client = [[GopherClient alloc] init];
         self.items = @[];
@@ -219,12 +219,12 @@
         [self.retryButton.centerXAnchor constraintEqualToAnchor:main.centerXAnchor], [self.retryButton.topAnchor constraintEqualToAnchor:self.statusLabel.bottomAnchor constant:16],
         [toolbar.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [toolbar.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [toolbar.topAnchor constraintEqualToAnchor:content.topAnchor], [toolbar.heightAnchor constraintEqualToConstant:54],
-        [self.backButton.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14], [self.backButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.backButton.widthAnchor constraintEqualToConstant:30],
-        [self.forwardButton.leadingAnchor constraintEqualToAnchor:self.backButton.trailingAnchor constant:4], [self.forwardButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.forwardButton.widthAnchor constraintEqualToConstant:30],
-        [self.reloadStopButton.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:4], [self.reloadStopButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.reloadStopButton.widthAnchor constraintEqualToConstant:30],
+        [self.backButton.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:14], [self.backButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.backButton.widthAnchor constraintEqualToConstant:26],
+        [self.forwardButton.leadingAnchor constraintEqualToAnchor:self.backButton.trailingAnchor constant:4], [self.forwardButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.forwardButton.widthAnchor constraintEqualToConstant:26],
+        [self.reloadStopButton.leadingAnchor constraintEqualToAnchor:self.forwardButton.trailingAnchor constant:4], [self.reloadStopButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.reloadStopButton.widthAnchor constraintEqualToConstant:26],
         [self.addressField.leadingAnchor constraintEqualToAnchor:self.reloadStopButton.trailingAnchor constant:10], [self.addressField.trailingAnchor constraintEqualToAnchor:self.bookmarkButton.leadingAnchor constant:-10],
         [self.addressField.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.addressField.heightAnchor constraintEqualToConstant:28],
-        [self.bookmarkButton.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-14], [self.bookmarkButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.bookmarkButton.widthAnchor constraintEqualToConstant:30],
+        [self.bookmarkButton.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-14], [self.bookmarkButton.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor], [self.bookmarkButton.widthAnchor constraintEqualToConstant:26],
         [splitView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [splitView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [splitView.topAnchor constraintEqualToAnchor:toolbar.bottomAnchor], [splitView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor]
     ]];
@@ -443,7 +443,7 @@
 
 - (void)reloadOrStop:(id)sender {
     if (self.isLoading) { [self stopLoading:sender]; return; }
-    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:NO];
+    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:YES];
 }
 
 - (void)stopLoading:(id)sender {
@@ -460,7 +460,7 @@
 }
 
 - (void)retryLastRequest:(id)sender {
-    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:NO];
+    if (self.currentHost.length) [self loadHost:self.currentHost port:self.currentPort selector:self.currentSelector type:self.currentType query:self.currentQuery url:self.currentURL recordHistory:YES];
 }
 
 - (void)focusAddressBar:(id)sender {

@@ -15,14 +15,14 @@
 }
 
 - (void)installApplicationMenu {
-    NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"GUI Gopher"];
-    NSMenuItem *appMenuItem = [[NSMenuItem alloc] initWithTitle:@"GUI Gopher" action:nil keyEquivalent:@""];
-    NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"GUI Gopher"];
-    NSMenuItem *aboutItem = [[NSMenuItem alloc] initWithTitle:@"About GUI Gopher" action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
+    NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"GopherPath"];
+    NSMenuItem *appMenuItem = [[NSMenuItem alloc] initWithTitle:@"GopherPath" action:nil keyEquivalent:@""];
+    NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"GopherPath"];
+    NSMenuItem *aboutItem = [[NSMenuItem alloc] initWithTitle:@"About GopherPath" action:@selector(orderFrontStandardAboutPanel:) keyEquivalent:@""];
     aboutItem.target = NSApp;
     [appMenu addItem:aboutItem];
     [appMenu addItem:NSMenuItem.separatorItem];
-    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit GUI Gopher" action:@selector(terminate:) keyEquivalent:@"q"];
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit GopherPath" action:@selector(terminate:) keyEquivalent:@"q"];
     quitItem.target = NSApp;
     [appMenu addItem:quitItem];
     appMenuItem.submenu = appMenu;
