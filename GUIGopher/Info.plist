@@ -4,9 +4,9 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key><string>en</string>
 	<key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key><string>com.gui-gopher.client</string>
+	<key>CFBundleIdentifier</key><string>com.gopherpath.client</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-	<key>CFBundleName</key><string>GUI Gopher</string>
+	<key>CFBundleName</key><string>GopherPath</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>LSMinimumSystemVersion</key><string>12.0</string>
 	<key>NSHighResolutionCapable</key><true/>
